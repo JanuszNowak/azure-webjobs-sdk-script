@@ -122,10 +122,11 @@ namespace Microsoft.Azure.WebJobs.Script.Description
 
             var startedEvent = new FunctionStartedEvent(functionExecutionContext.InvocationId, Metadata);
             _metrics.BeginEvent(startedEvent);
-            var invokeLatencyEvent = LogInvocationMetrics(_metrics, Metadata);
+            var invokeLatencyEvent = LogInvocationMetrics(_metrics, Metadata); // $$$ Important!
             var invocationStopWatch = new Stopwatch();
             invocationStopWatch.Start();
 
+            bool success = false;
             try
             {
                 string startMessage = $"Function started (Id={invocationId})";
@@ -141,41 +142,15 @@ namespace Microsoft.Azure.WebJobs.Script.Description
                 };
 
                 await InvokeCore(parameters, context);
-
-                invocationStopWatch.Stop();
-                LogFunctionResult(startedEvent, true, invocationId, invocationStopWatch.ElapsedMilliseconds);
-            }
-            catch (AggregateException ex)
-            {
-                ExceptionDispatchInfo exInfo = null;
-
-                // If there's only a single exception, rethrow it by itself
-                Exception singleEx = ex.Flatten().InnerExceptions.SingleOrDefault();
-                if (singleEx != null)
-                {
-                    exInfo = ExceptionDispatchInfo.Capture(singleEx);
-                }
-                else
-                {
-                    exInfo = ExceptionDispatchInfo.Capture(ex);
-                }
-
-                invocationStopWatch.Stop();
-                LogFunctionResult(startedEvent, false, invocationId, invocationStopWatch.ElapsedMilliseconds);
-                exInfo.Throw();
-            }
-            catch
-            {
-                invocationStopWatch.Stop();
-                LogFunctionResult(startedEvent, false, invocationId, invocationStopWatch.ElapsedMilliseconds);
-                throw;
+                success = true;
             }
             finally
             {
-                if (startedEvent != null)
-                {
-                    _metrics.EndEvent(startedEvent);
-                }
+                invocationStopWatch.Stop();
+                LogFunctionResult(startedEvent, success, invocationId, invocationStopWatch.ElapsedMilliseconds);
+
+                _metrics.EndEvent(startedEvent);
+
                 if (invokeLatencyEvent != null)
                 {
                     _metrics.EndEvent(invokeLatencyEvent);
