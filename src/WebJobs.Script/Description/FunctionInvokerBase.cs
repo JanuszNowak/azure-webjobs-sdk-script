@@ -106,16 +106,16 @@ namespace Microsoft.Azure.WebJobs.Script.Description
             Binder binder = parameters.OfType<Binder>().FirstOrDefault();
             ILogger logger = parameters.OfType<ILogger>().FirstOrDefault();
 
-                FunctionInvocationContext context = new FunctionInvocationContext
-                {
-                    ExecutionContext = functionExecutionContext,
-                    Binder = binder,
-                    TraceWriter = functionTraceWriter,
-                    Logger = logger
-                };
+            FunctionInvocationContext context = new FunctionInvocationContext
+            {
+                ExecutionContext = functionExecutionContext,
+                Binder = binder,
+                TraceWriter = functionTraceWriter,
+                Logger = logger
+            };
 
             return context;
-            }
+        }
 
         internal static object LogInvocationMetrics(IMetricsLogger metrics, FunctionMetadata metadata)
         {
@@ -160,6 +160,7 @@ namespace Microsoft.Azure.WebJobs.Script.Description
             }
             TraceWriter.Trace(traceEvent);
         }
+
         internal void TraceCompilationDiagnostics(ImmutableArray<Diagnostic> diagnostics, LogTargets logTarget = LogTargets.All)
         {
             if (logTarget == LogTargets.None)

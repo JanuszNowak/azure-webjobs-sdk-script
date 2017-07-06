@@ -2,13 +2,16 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Host.Loggers;
 using Microsoft.Azure.WebJobs.Script.Description;
 using Microsoft.Azure.WebJobs.Script.Diagnostics;
 using Microsoft.Azure.WebJobs.Script.Eventing;
+using Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics;
 using Moq;
 using Xunit;
 
@@ -26,16 +29,23 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
             _traceWriter = new TestTraceWriter(TraceLevel.Verbose);
             var config = new ScriptHostConfiguration();
             config.HostConfig.AddService<IMetricsLogger>(_metricsLogger);
+            var funcDescriptor = new FunctionDescriptor();
+            var funcDescriptors = new Collection<FunctionDescriptor>();
+            funcDescriptors.Add(funcDescriptor);
             var eventManager = new Mock<IScriptEventManager>();
             var hostMock = new Mock<ScriptHost>(MockBehavior.Strict, new object[] { new NullScriptHostEnvironment(), eventManager.Object, config, null });
             hostMock.SetupGet(h => h.FunctionTraceWriterFactory).Returns(new FunctionTraceWriterFactory(config));
+            hostMock.SetupGet(h => h.Functions).Returns(funcDescriptors);
             hostMock.Object.TraceWriter = _traceWriter;
 
             var metadata = new FunctionMetadata
             {
                 Name = "TestFunction"
             };
-            _invoker = new MockInvoker(hostMock.Object, metadata);
+            _invoker = new MockInvoker(hostMock.Object, _metricsLogger, metadata);
+            funcDescriptor.Metadata = metadata;
+            funcDescriptor.Invoker = _invoker;
+            funcDescriptor.Name = metadata.Name;
         }
 
         [Fact]
@@ -166,20 +176,46 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
 
         private class MockInvoker : FunctionInvokerBase
         {
-            public MockInvoker(ScriptHost host, FunctionMetadata metadata) : base(host, metadata)
+            private readonly IMetricsLogger _metrics;
+
+            public MockInvoker(ScriptHost host, IMetricsLogger metrics, FunctionMetadata metadata) : base(host, metadata)
             {
+                _metrics = metrics;
             }
 
             protected override async Task InvokeCore(object[] parameters, FunctionInvocationContext context)
             {
+                var fastLogger = new FastLogger(
+                    (name) => this.Host.LookupFunction(name),
+                    _metrics);
+
+                FunctionInstanceLogEntry item = new FunctionInstanceLogEntry
+                {
+                     FunctionInstanceId = context.ExecutionContext.InvocationId,
+                     StartTime = DateTime.UtcNow,
+                     FunctionName = this.Metadata.Name
+                };
+                await fastLogger.AddAsync(item);
+
                 InvocationData invocation = parameters.OfType<InvocationData>().FirstOrDefault() ?? new InvocationData();
 
-                if (invocation.Throw)
+                string error = "failed";
+                try
                 {
-                    throw new InvalidOperationException("Kaboom!");
-                }
+                    if (invocation.Throw)
+                    {
+                        throw new InvalidOperationException("Kaboom!");
+                    }
 
-                await Task.Delay(invocation.Delay);
+                    await Task.Delay(invocation.Delay);
+                    error = null; // success
+                }
+                finally
+                {
+                    item.EndTime = DateTime.UtcNow;
+                    item.ErrorDetails = error;
+                    await fastLogger.AddAsync(item);
+                }
             }
         }
 

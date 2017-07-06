@@ -25,14 +25,17 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
 
         private Dictionary<Guid, PerInstanceState> _stateBag = new Dictionary<Guid, PerInstanceState>();
 
-        public FastLogger(Func<string, FunctionDescriptor> funcLookup, IMetricsLogger metrics, string hostName, string accountConnectionString, TraceWriter trace)
+        public FastLogger(
+            Func<string, FunctionDescriptor> funcLookup,
+            IMetricsLogger metrics,
+            string hostName,
+            string accountConnectionString,
+            TraceWriter trace) : this(funcLookup, metrics)
         {
             if (trace == null)
             {
                 throw new ArgumentNullException(nameof(trace));
             }
-            _metrics = metrics;
-            _funcLookup = funcLookup;
 
             CloudStorageAccount account = CloudStorageAccount.Parse(accountConnectionString);
             var client = account.CreateCloudTableClient();
@@ -40,6 +43,14 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
 
             string containerName = Environment.MachineName;
             this._writer = LogFactory.NewWriter(hostName, containerName, tableProvider, (e) => OnException(e, trace));
+        }
+
+        internal FastLogger(
+            Func<string, FunctionDescriptor> funcLookup,
+            IMetricsLogger metrics)
+        {
+            _metrics = metrics;
+            _funcLookup = funcLookup;
         }
 
         public async Task AddAsync(FunctionInstanceLogEntry item, CancellationToken cancellationToken = default(CancellationToken))
@@ -64,7 +75,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
                 // Started
                 if (state == null)
                 {
-                    string shortName = GetShortName(item.FunctionName);
+                    string shortName = Utility.GetFunctionShortName(item.FunctionName);
 
                     FunctionDescriptor descr = _funcLookup(shortName);
                     FunctionLogInfo logInfo = ((FunctionInvokerBase)descr.Invoker).LogInfo;
@@ -79,33 +90,29 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
                 }
             }
 
-            await _writer.AddAsync(new FunctionInstanceLogItem
+            if (_writer != null)
             {
-                FunctionInstanceId = item.FunctionInstanceId,
-                FunctionName = Utility.GetFunctionShortName(item.FunctionName),
-                StartTime = item.StartTime,
-                EndTime = item.EndTime,
-                TriggerReason = item.TriggerReason,
-                Arguments = item.Arguments,
-                ErrorDetails = item.ErrorDetails,
-                LogOutput = item.LogOutput,
-                ParentId = item.ParentId
-            });
-        }
-
-        // $$$ remove
-        private static string GetShortName(string functionName)
-        {
-            int i = functionName.LastIndexOf('.');
-            if (i != 1)
-            {
-                return functionName.Substring(i + 1);
+                await _writer.AddAsync(new FunctionInstanceLogItem
+                {
+                    FunctionInstanceId = item.FunctionInstanceId,
+                    FunctionName = Utility.GetFunctionShortName(item.FunctionName),
+                    StartTime = item.StartTime,
+                    EndTime = item.EndTime,
+                    TriggerReason = item.TriggerReason,
+                    Arguments = item.Arguments,
+                    ErrorDetails = item.ErrorDetails,
+                    LogOutput = item.LogOutput,
+                    ParentId = item.ParentId
+                });
             }
-            return functionName;
         }
 
         public Task FlushAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
+            if (_writer == null)
+            {
+                return Task.CompletedTask;
+            }
             return _writer.FlushAsync();
         }
 
