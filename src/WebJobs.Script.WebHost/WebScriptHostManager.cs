@@ -444,7 +444,8 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             {
                 // hostId may be missing in local test scenarios.
                 var hostId = config.HostConfig.HostId ?? "default";
-                var fastLogger = new FastLogger(hostId, dashboardString, config.TraceWriter);
+                Func<string, FunctionDescriptor> funcLookup = (name) => this.Instance.LookupFunction(name);
+                var fastLogger = new FastLogger(funcLookup, _metricsLogger, hostId, dashboardString, config.TraceWriter);
                 hostConfig.AddService<IAsyncCollector<FunctionInstanceLogEntry>>(fastLogger);
             }
             hostConfig.DashboardConnectionString = null; // disable slow logging

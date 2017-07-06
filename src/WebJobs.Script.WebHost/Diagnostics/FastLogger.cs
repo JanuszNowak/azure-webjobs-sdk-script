@@ -2,11 +2,14 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.Loggers;
 using Microsoft.Azure.WebJobs.Logging;
+using Microsoft.Azure.WebJobs.Script.Description;
+using Microsoft.Azure.WebJobs.Script.Diagnostics;
 using Microsoft.WindowsAzure.Storage;
 
 namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
@@ -16,12 +19,20 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
     {
         private readonly ILogWriter _writer;
 
-        public FastLogger(string hostName, string accountConnectionString, TraceWriter trace)
+        private readonly Func<string, FunctionDescriptor> _funcLookup;
+
+        private readonly IMetricsLogger _metrics;
+
+        private Dictionary<Guid, PerInstanceState> _stateBag = new Dictionary<Guid, PerInstanceState>();
+
+        public FastLogger(Func<string, FunctionDescriptor> funcLookup, IMetricsLogger metrics, string hostName, string accountConnectionString, TraceWriter trace)
         {
             if (trace == null)
             {
                 throw new ArgumentNullException(nameof(trace));
             }
+            _metrics = metrics;
+            _funcLookup = funcLookup;
 
             CloudStorageAccount account = CloudStorageAccount.Parse(accountConnectionString);
             var client = account.CreateCloudTableClient();
@@ -33,6 +44,41 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
 
         public async Task AddAsync(FunctionInstanceLogEntry item, CancellationToken cancellationToken = default(CancellationToken))
         {
+            PerInstanceState state; // get from item property bag
+            lock (_stateBag)
+            {
+                // $$$ replace
+                if (!_stateBag.TryGetValue(item.FunctionInstanceId, out state))
+                {
+                }
+            }
+
+            if (item.EndTime.HasValue)
+            {
+                // Completed
+                bool success = item.ErrorDetails == null;
+                state.End(success);
+            }
+            else
+            {
+                // Started
+                if (state == null)
+                {
+                    string shortName = GetShortName(item.FunctionName);
+
+                    FunctionDescriptor descr = _funcLookup(shortName);
+                    FunctionLogInfo logInfo = ((FunctionInvokerBase)descr.Invoker).LogInfo;
+                    state = new PerInstanceState(descr.Metadata, _metrics, item.FunctionInstanceId, logInfo);
+
+                    lock (_stateBag)
+                    {
+                        _stateBag[item.FunctionInstanceId] = state; // $$$ Not threadsafe.
+                    }
+
+                    state.Start();
+                }
+            }
+
             await _writer.AddAsync(new FunctionInstanceLogItem
             {
                 FunctionInstanceId = item.FunctionInstanceId,
@@ -45,6 +91,17 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
                 LogOutput = item.LogOutput,
                 ParentId = item.ParentId
             });
+        }
+
+        // $$$ remove
+        private static string GetShortName(string functionName)
+        {
+            int i = functionName.LastIndexOf('.');
+            if (i != 1)
+            {
+                return functionName.Substring(i + 1);
+            }
+            return functionName;
         }
 
         public Task FlushAsync(CancellationToken cancellationToken = default(CancellationToken))

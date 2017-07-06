@@ -186,6 +186,16 @@ namespace Microsoft.Azure.WebJobs.Script
         }
 
         /// <summary>
+        /// Lookup a function by name
+        /// </summary>
+        /// <param name="name">name of function</param>
+        /// <returns>function or null if not found</returns>
+        public FunctionDescriptor LookupFunction(string name)
+        {
+            return Functions.FirstOrDefault(p => p.Name.ToLowerInvariant() == name.ToLowerInvariant());
+        }
+
+        /// <summary>
         /// Notifies this host that it should be in debug mode.
         /// </summary>
         public void NotifyDebug()
