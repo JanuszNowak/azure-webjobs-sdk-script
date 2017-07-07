@@ -17,13 +17,13 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
     // Adapter for capturing SDK events and logging them to tables.
     internal class FastLogger : IAsyncCollector<FunctionInstanceLogEntry>
     {
+        private const string Key = "metadata";
+
         private readonly ILogWriter _writer;
 
         private readonly Func<string, FunctionDescriptor> _funcLookup;
 
         private readonly IMetricsLogger _metrics;
-
-        private Dictionary<Guid, PerInstanceState> _stateBag = new Dictionary<Guid, PerInstanceState>();
 
         public FastLogger(
             Func<string, FunctionDescriptor> funcLookup,
@@ -55,14 +55,8 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
 
         public async Task AddAsync(FunctionInstanceLogEntry item, CancellationToken cancellationToken = default(CancellationToken))
         {
-            PerInstanceState state; // get from item property bag
-            lock (_stateBag)
-            {
-                // $$$ replace
-                if (!_stateBag.TryGetValue(item.FunctionInstanceId, out state))
-                {
-                }
-            }
+            PerInstanceState state;
+            item.Properties.TryGetValue(Key, out state);
 
             if (item.EndTime.HasValue)
             {
@@ -81,10 +75,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
                     FunctionLogInfo logInfo = ((FunctionInvokerBase)descr.Invoker).LogInfo;
                     state = new PerInstanceState(descr.Metadata, _metrics, item.FunctionInstanceId, logInfo);
 
-                    lock (_stateBag)
-                    {
-                        _stateBag[item.FunctionInstanceId] = state; // $$$ Not threadsafe.
-                    }
+                    item.Properties[Key] = state;
 
                     state.Start();
                 }

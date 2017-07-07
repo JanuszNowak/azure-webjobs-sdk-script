@@ -97,9 +97,8 @@ namespace Microsoft.Azure.WebJobs.Script.Description
         {
             // We require the ExecutionContext, so this will throw if one is not found.
             ExecutionContext functionExecutionContext = parameters.OfType<ExecutionContext>().First();
-            functionExecutionContext.FunctionDirectory = metadata.FunctionDirectory; // $$$ set in binder?
-
-            // context.FunctionName = Metadata.Name; // Already set? $$$
+            functionExecutionContext.FunctionDirectory = metadata.FunctionDirectory;
+            functionExecutionContext.FunctionName = metadata.Name;
 
             // These may not be present, so null is okay.
             TraceWriter functionTraceWriter = parameters.OfType<TraceWriter>().FirstOrDefault();
