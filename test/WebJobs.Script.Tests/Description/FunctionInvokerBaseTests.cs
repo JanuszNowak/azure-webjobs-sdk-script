@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
@@ -176,26 +177,25 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
 
         private class MockInvoker : FunctionInvokerBase
         {
-            private readonly IMetricsLogger _metrics;
+            private readonly FastLogger _fastLogger;
 
             public MockInvoker(ScriptHost host, IMetricsLogger metrics, FunctionMetadata metadata) : base(host, metadata)
             {
-                _metrics = metrics;
+                _fastLogger = new FastLogger(
+                    (name) => this.Host.LookupFunction(name),
+                    metrics);
             }
 
             protected override async Task InvokeCore(object[] parameters, FunctionInvocationContext context)
             {
-                var fastLogger = new FastLogger(
-                    (name) => this.Host.LookupFunction(name),
-                    _metrics);
-
                 FunctionInstanceLogEntry item = new FunctionInstanceLogEntry
                 {
                      FunctionInstanceId = context.ExecutionContext.InvocationId,
                      StartTime = DateTime.UtcNow,
-                     FunctionName = this.Metadata.Name
+                     FunctionName = this.Metadata.Name,
+                     Properties = new Dictionary<string, object>()
                 };
-                await fastLogger.AddAsync(item);
+                await _fastLogger.AddAsync(item);
 
                 InvocationData invocation = parameters.OfType<InvocationData>().FirstOrDefault() ?? new InvocationData();
 
@@ -214,7 +214,7 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
                 {
                     item.EndTime = DateTime.UtcNow;
                     item.ErrorDetails = error;
-                    await fastLogger.AddAsync(item);
+                    await _fastLogger.AddAsync(item);
                 }
             }
         }

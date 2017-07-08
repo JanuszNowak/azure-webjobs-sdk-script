@@ -438,6 +438,7 @@
     <Compile Include="Description\DotNet\Compilation\Raw\RawAssemblyCompilationService.cs" />
     <Compile Include="Description\FunctionInvocationContext.cs" />
     <Compile Include="Description\FunctionLoader.cs" />
+    <Compile Include="Description\FunctionLogInfo.cs" />
     <Compile Include="Description\LogTargets.cs" />
     <Compile Include="Description\Node\Compilation\ConditionalJavaScriptCompilationService.cs" />
     <Compile Include="Description\Node\Compilation\IJavaScriptCompilation.cs" />

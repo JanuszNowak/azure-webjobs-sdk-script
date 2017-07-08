@@ -9,10 +9,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
-using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host;
-using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Azure.WebJobs.Script.Diagnostics;
 using Microsoft.Azure.WebJobs.Script.Eventing;
 using Microsoft.CodeAnalysis;
@@ -29,8 +27,7 @@ namespace Microsoft.Azure.WebJobs.Script.Description
         {
             Host = host;
             Metadata = functionMetadata;
-
-            this.LogInfo = new FunctionLogInfo(host, functionMetadata.Name);
+            LogInfo = new FunctionLogInfo(this.Host, functionMetadata.Name);
         }
 
         protected static IDictionary<string, object> PrimaryHostTraceProperties { get; }
@@ -256,66 +253,6 @@ namespace Microsoft.Azure.WebJobs.Script.Description
             {
                 _metrics.EndEvent(invokeLatencyEvent);
             }
-        }
-    }
-
-    // Static, per-function
-    public class FunctionLogInfo
-    {
-        public FunctionLogInfo(ScriptHost host, string functionName)
-        {
-            // Function file logging is only done conditionally
-            TraceWriter traceWriter = host.FunctionTraceWriterFactory.Create(functionName);
-            FileTraceWriter = traceWriter.Conditional(t => host.FileLoggingEnabled && (!(t.Properties?.ContainsKey(ScriptConstants.TracePropertyPrimaryHostKey) ?? false) || host.IsPrimary));
-
-            // The global trace writer used by the invoker will write all traces to both
-            // the host trace writer as well as our file trace writer
-            traceWriter = host.TraceWriter != null ?
-                new CompositeTraceWriter(new TraceWriter[] { FileTraceWriter, host.TraceWriter }) :
-                FileTraceWriter;
-
-            // Apply the function name as an event property to all traces
-            var functionTraceProperties = new Dictionary<string, object>
-            {
-                { ScriptConstants.TracePropertyFunctionNameKey, functionName }
-            };
-
-            TraceWriter = traceWriter.Apply(functionTraceProperties);
-            Logger = host.ScriptConfig.HostConfig.LoggerFactory?.CreateLogger(LogCategories.Executor);
-        }
-
-        internal TraceWriter FileTraceWriter { get; private set; }
-
-        public TraceWriter TraceWriter { get; private set; }
-
-        public ILogger Logger { get; private set; }
-
-        public void TraceError(string errorMessage)
-        {
-            TraceWriter.Error(errorMessage);
-            Logger?.LogError(errorMessage);
-
-            // when any errors occur, we want to flush immediately
-            TraceWriter.Flush();
-        }
-
-        public void LogFunctionStart(string invocationId)
-        {
-            string startMessage = $"Function started (Id={invocationId})";
-            TraceWriter.Info(startMessage);
-            Logger?.LogInformation(startMessage);
-        }
-
-        public void LogFunctionResult(bool success, string invocationId, long elapsedMs)
-        {
-            string resultString = success ? "Success" : "Failure";
-            string message = $"Function completed ({resultString}, Id={invocationId ?? "0"}, Duration={elapsedMs}ms)";
-
-            TraceLevel traceWriterLevel = success ? TraceLevel.Info : TraceLevel.Error;
-            LogLevel logLevel = success ? LogLevel.Information : LogLevel.Error;
-
-            TraceWriter.Trace(message, traceWriterLevel, null);
-            Logger?.Log(logLevel, new EventId(0), message, null, (s, e) => s);
         }
     }
 }

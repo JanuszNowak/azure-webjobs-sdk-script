@@ -2,7 +2,6 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host;
@@ -72,7 +71,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
                     string shortName = Utility.GetFunctionShortName(item.FunctionName);
 
                     FunctionDescriptor descr = _funcLookup(shortName);
-                    FunctionLogInfo logInfo = ((FunctionInvokerBase)descr.Invoker).LogInfo;
+                    FunctionLogInfo logInfo = descr.Invoker.LogInfo;
                     state = new PerInstanceState(descr.Metadata, _metrics, item.FunctionInstanceId, logInfo);
 
                     item.Properties[Key] = state;

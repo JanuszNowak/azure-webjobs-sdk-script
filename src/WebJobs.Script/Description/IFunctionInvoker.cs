@@ -9,6 +9,11 @@ namespace Microsoft.Azure.WebJobs.Script.Description
     public interface IFunctionInvoker
     {
         /// <summary>
+        /// Gets logging information for this function.
+        /// </summary>
+        FunctionLogInfo LogInfo { get; }
+
+        /// <summary>
         /// Invoke the function using the specified parameters.
         /// </summary>
         /// <param name="parameters">The parameters.</param>
